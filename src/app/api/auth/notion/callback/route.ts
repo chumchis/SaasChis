@@ -69,8 +69,9 @@ export async function GET(request: NextRequest) {
     // data.access_token, data.workspace_id, data.workspace_name, data.bot_id
     
     // Redirigir al dashboard con éxito
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
     const redirectResponse = NextResponse.redirect(
-      `${request.nextUrl.origin}/dashboard?notion=connected`
+      `${appUrl}/dashboard?notion=connected`
     )
     
     // Limpiar cookie de state

@@ -74,8 +74,9 @@ export async function GET(request: NextRequest) {
     // TODO: Guardar tokens en base de datos
     // data.access_token, data.refresh_token, data.scope
     
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
     const redirectResponse = NextResponse.redirect(
-      `${request.nextUrl.origin}/dashboard?airtable=connected`
+      `${appUrl}/dashboard?airtable=connected`
     )
     
     redirectResponse.cookies.delete('airtable_oauth_state')
