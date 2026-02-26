@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     // data.access_token, data.workspace_id, data.workspace_name, data.bot_id
     
     // Redirigir al dashboard con éxito
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
     const redirectResponse = NextResponse.redirect(
       `${appUrl}/dashboard?notion=connected`
     )
