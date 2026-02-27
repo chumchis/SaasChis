@@ -34,10 +34,18 @@ export async function GET(request: NextRequest) {
   
   const clientId = process.env.NOTION_CLIENT_ID
   const clientSecret = process.env.NOTION_CLIENT_SECRET
+  const redirectUri = process.env.NOTION_REDIRECT_URI
   
   if (!clientId || !clientSecret) {
     return NextResponse.json(
       { error: 'Notion credentials not configured' },
+      { status: 500 }
+    )
+  }
+  
+  if (!redirectUri) {
+    return NextResponse.json(
+      { error: 'NOTION_REDIRECT_URI not configured' },
       { status: 500 }
     )
   }
@@ -53,13 +61,13 @@ export async function GET(request: NextRequest) {
       body: JSON.stringify({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: process.env.NOTION_REDIRECT_URI || 
-          `${request.nextUrl.origin}/api/auth/notion/callback`,
+        redirect_uri: redirectUri,
       }),
     })
     
     if (!response.ok) {
       const errorData = await response.json()
+      console.error('Notion token exchange error:', errorData)
       throw new Error(errorData.error_description || 'Token exchange failed')
     }
     

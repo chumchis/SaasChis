@@ -40,10 +40,18 @@ export async function GET(request: NextRequest) {
   
   const clientId = process.env.AIRTABLE_CLIENT_ID
   const clientSecret = process.env.AIRTABLE_CLIENT_SECRET
+  const redirectUri = process.env.AIRTABLE_REDIRECT_URI
   
   if (!clientId || !clientSecret) {
     return NextResponse.json(
       { error: 'Airtable credentials not configured' },
+      { status: 500 }
+    )
+  }
+  
+  if (!redirectUri) {
+    return NextResponse.json(
+      { error: 'AIRTABLE_REDIRECT_URI not configured' },
       { status: 500 }
     )
   }
@@ -58,8 +66,7 @@ export async function GET(request: NextRequest) {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: process.env.AIRTABLE_REDIRECT_URI || 
-          `${request.nextUrl.origin}/api/auth/airtable/callback`,
+        redirect_uri: redirectUri,
         code_verifier: codeVerifier,
       }),
     })
