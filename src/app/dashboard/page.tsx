@@ -1,13 +1,41 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
 export default function DashboardPage() {
+  const searchParams = useSearchParams()
   const [notionConnected, setNotionConnected] = useState(false)
   const [airtableConnected, setAirtableConnected] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    
+    // Cargar estado desde localStorage
+    const savedNotion = localStorage.getItem('notion_connected') === 'true'
+    const savedAirtable = localStorage.getItem('airtable_connected') === 'true'
+    
+    setNotionConnected(savedNotion)
+    setAirtableConnected(savedAirtable)
+    
+    // Detectar parámetros de URL (después de OAuth callback)
+    const notionParam = searchParams.get('notion')
+    const airtableParam = searchParams.get('airtable')
+    
+    if (notionParam === 'connected') {
+      setNotionConnected(true)
+      localStorage.setItem('notion_connected', 'true')
+    }
+    
+    if (airtableParam === 'connected') {
+      setAirtableConnected(true)
+      localStorage.setItem('airtable_connected', 'true')
+    }
+  }, [searchParams])
 
   const handleConnectNotion = () => {
     window.location.href = '/api/auth/notion'
@@ -15,6 +43,21 @@ export default function DashboardPage() {
 
   const handleConnectAirtable = () => {
     window.location.href = '/api/auth/airtable'
+  }
+
+  const handleDisconnectNotion = () => {
+    localStorage.removeItem('notion_connected')
+    setNotionConnected(false)
+  }
+
+  const handleDisconnectAirtable = () => {
+    localStorage.removeItem('airtable_connected')
+    setAirtableConnected(false)
+  }
+
+  // Evitar hidratación incorrecta
+  if (!mounted) {
+    return null
   }
 
   return (
@@ -41,14 +84,22 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                onClick={handleConnectNotion}
-                disabled={notionConnected}
-                className="w-full"
-                variant={notionConnected ? 'outline' : 'default'}
-              >
-                {notionConnected ? 'Conectado' : 'Conectar Notion'}
-              </Button>
+              {notionConnected ? (
+                <Button 
+                  onClick={handleDisconnectNotion}
+                  className="w-full"
+                  variant="outline"
+                >
+                  Desconectar Notion
+                </Button>
+              ) : (
+                <Button 
+                  onClick={handleConnectNotion}
+                  className="w-full"
+                >
+                  Conectar Notion
+                </Button>
+              )}
             </CardContent>
           </Card>
 
@@ -69,14 +120,22 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                onClick={handleConnectAirtable}
-                disabled={airtableConnected}
-                className="w-full"
-                variant={airtableConnected ? 'outline' : 'default'}
-              >
-                {airtableConnected ? 'Conectado' : 'Conectar Airtable'}
-              </Button>
+              {airtableConnected ? (
+                <Button 
+                  onClick={handleDisconnectAirtable}
+                  className="w-full"
+                  variant="outline"
+                >
+                  Desconectar Airtable
+                </Button>
+              ) : (
+                <Button 
+                  onClick={handleConnectAirtable}
+                  className="w-full"
+                >
+                  Conectar Airtable
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>
