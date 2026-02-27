@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
-export default function DashboardPage() {
+function DashboardContent() {
   const searchParams = useSearchParams()
   const [notionConnected, setNotionConnected] = useState(false)
   const [airtableConnected, setAirtableConnected] = useState(false)
@@ -161,5 +161,24 @@ export default function DashboardPage() {
         )}
       </div>
     </div>
+  )
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
+        <p className="text-gray-600 mb-8">Cargando...</p>
+      </div>
+    </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <DashboardContent />
+    </Suspense>
   )
 }
