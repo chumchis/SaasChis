@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Play, RefreshCw } from 'lucide-react'
 
 interface NotionDatabase {
   id: string
@@ -19,11 +19,23 @@ interface AirtableBase {
   name: string
 }
 
+interface Sync {
+  id: string
+  notionDatabaseId: string
+  airtableBaseId: string
+  notionDatabaseName?: string
+  airtableBaseName?: string
+  createdAt: string
+  status: string
+}
+
 function DashboardContent() {
   const searchParams = useSearchParams()
   const [notionConnected, setNotionConnected] = useState(false)
   const [airtableConnected, setAirtableConnected] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [syncs, setSyncs] = useState<Sync[]>([])
+  const [isLoadingSyncs, setIsLoadingSyncs] = useState(false)
   
   // Sync modal state
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false)
@@ -34,6 +46,10 @@ function DashboardContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [isFetching, setIsFetching] = useState(false)
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle')
+
+  // Execute sync state
+  const [executingSyncId, setExecutingSyncId] = useState<string | null>(null)
+  const [executionResult, setExecutionResult] = useState<any>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -56,7 +72,27 @@ function DashboardContent() {
       setAirtableConnected(true)
       localStorage.setItem('airtable_connected', 'true')
     }
+
+    // Cargar sincronizaciones existentes
+    if (savedNotion && savedAirtable) {
+      loadSyncs()
+    }
   }, [searchParams])
+
+  const loadSyncs = async () => {
+    setIsLoadingSyncs(true)
+    try {
+      const res = await fetch('/api/sync')
+      if (res.ok) {
+        const data = await res.json()
+        setSyncs(data.syncs || [])
+      }
+    } catch (error) {
+      console.error('Error loading syncs:', error)
+    } finally {
+      setIsLoadingSyncs(false)
+    }
+  }
 
   const handleConnectNotion = () => {
     window.location.href = '/api/auth/notion'
@@ -84,15 +120,16 @@ function DashboardContent() {
     setSyncStatus('idle')
     
     try {
-      // Fetch Notion databases
-      const notionRes = await fetch('/api/notion/databases')
+      const [notionRes, airtableRes] = await Promise.all([
+        fetch('/api/notion/databases'),
+        fetch('/api/airtable/bases')
+      ])
+      
       if (notionRes.ok) {
         const notionData = await notionRes.json()
         setNotionDatabases(notionData.databases || [])
       }
       
-      // Fetch Airtable bases
-      const airtableRes = await fetch('/api/airtable/bases')
       if (airtableRes.ok) {
         const airtableData = await airtableRes.json()
         setAirtableBases(airtableData.bases || [])
@@ -120,12 +157,13 @@ function DashboardContent() {
       
       if (res.ok) {
         setSyncStatus('success')
+        await loadSyncs() // Recargar lista
         setTimeout(() => {
           setIsSyncModalOpen(false)
           setSyncStatus('idle')
           setSelectedNotionDb('')
           setSelectedAirtableBase('')
-        }, 2000)
+        }, 1500)
       } else {
         setSyncStatus('error')
       }
@@ -134,6 +172,27 @@ function DashboardContent() {
       setSyncStatus('error')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleExecuteSync = async (syncId: string) => {
+    setExecutingSyncId(syncId)
+    setExecutionResult(null)
+    
+    try {
+      const res = await fetch('/api/sync/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ syncId }),
+      })
+      
+      const data = await res.json()
+      setExecutionResult(data)
+    } catch (error) {
+      console.error('Error executing sync:', error)
+      setExecutionResult({ error: 'Error al ejecutar' })
+    } finally {
+      setExecutingSyncId(null)
     }
   }
 
@@ -223,120 +282,183 @@ function DashboardContent() {
 
         {/* Sync Section */}
         {notionConnected && airtableConnected && (
-          <Card className="mt-8 border-green-200 bg-green-50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <span className="text-2xl">🚀</span>
-                ¡Listo para sincronizar!
-              </CardTitle>
-              <CardDescription>
-                Ambas herramientas están conectadas. Puedes empezar a sincronizar datos.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Dialog open={isSyncModalOpen} onOpenChange={setIsSyncModalOpen}>
-                <DialogTrigger asChild>
-                  <Button className="w-full" size="lg" onClick={handleOpenSyncModal}>
-                    Crear primera sincronización
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[500px]">
-                  <DialogHeader>
-                    <DialogTitle>Crear sincronización</DialogTitle>
-                    <DialogDescription>
-                      Selecciona una base de datos de Notion y una base de Airtable para sincronizar.
-                    </DialogDescription>
-                  </DialogHeader>
-                  
-                  <div className="grid gap-6 py-4">
-                    {isFetching ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                        <span className="ml-2 text-gray-500">Cargando bases...</span>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="grid gap-2">
-                          <label className="text-sm font-medium">Base de datos de Notion</label>
-                          <Select value={selectedNotionDb} onValueChange={setSelectedNotionDb}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecciona una base de Notion" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {notionDatabases.length === 0 ? (
-                                <SelectItem value="none" disabled>
-                                  No se encontraron bases
-                                </SelectItem>
-                              ) : (
-                                notionDatabases.map((db) => (
-                                  <SelectItem key={db.id} value={db.id}>
-                                    {db.title}
-                                  </SelectItem>
-                                ))
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="grid gap-2">
-                          <label className="text-sm font-medium">Base de Airtable</label>
-                          <Select value={selectedAirtableBase} onValueChange={setSelectedAirtableBase}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecciona una base de Airtable" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {airtableBases.length === 0 ? (
-                                <SelectItem value="none" disabled>
-                                  No se encontraron bases
-                                </SelectItem>
-                              ) : (
-                                airtableBases.map((base) => (
-                                  <SelectItem key={base.id} value={base.id}>
-                                    {base.name}
-                                  </SelectItem>
-                                ))
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </>
-                    )}
-
-                    {syncStatus === 'success' && (
-                      <div className="rounded-md bg-green-100 p-3 text-sm text-green-800">
-                        ✅ Sincronización creada exitosamente
-                      </div>
-                    )}
+          <>
+            <Card className="mt-8 border-green-200 bg-green-50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="text-2xl">🚀</span>
+                  ¡Listo para sincronizar!
+                </CardTitle>
+                <CardDescription>
+                  Crea una nueva sincronización entre Notion y Airtable
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Dialog open={isSyncModalOpen} onOpenChange={setIsSyncModalOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="w-full" size="lg" onClick={handleOpenSyncModal}>
+                      Crear nueva sincronización
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                      <DialogTitle>Crear sincronización</DialogTitle>
+                      <DialogDescription>
+                        Selecciona una base de datos de Notion y una base de Airtable para sincronizar.
+                      </DialogDescription>
+                    </DialogHeader>
                     
-                    {syncStatus === 'error' && (
-                      <div className="rounded-md bg-red-100 p-3 text-sm text-red-800">
-                        ❌ Error al crear la sincronización. Intenta de nuevo.
-                      </div>
-                    )}
-                  </div>
-
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsSyncModalOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button 
-                      onClick={handleCreateSync}
-                      disabled={!selectedNotionDb || !selectedAirtableBase || isLoading}
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Creando...
-                        </>
+                    <div className="grid gap-6 py-4">
+                      {isFetching ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                          <span className="ml-2 text-gray-500">Cargando bases...</span>
+                        </div>
                       ) : (
-                        'Crear sincronización'
+                        <>
+                          <div className="grid gap-2">
+                            <label className="text-sm font-medium">Base de datos de Notion</label>
+                            <Select value={selectedNotionDb} onValueChange={setSelectedNotionDb}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecciona una base de Notion" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {notionDatabases.length === 0 ? (
+                                  <SelectItem value="none" disabled>
+                                    No se encontraron bases
+                                  </SelectItem>
+                                ) : (
+                                  notionDatabases.map((db) => (
+                                    <SelectItem key={db.id} value={db.id}>
+                                      {db.title}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="grid gap-2">
+                            <label className="text-sm font-medium">Base de Airtable</label>
+                            <Select value={selectedAirtableBase} onValueChange={setSelectedAirtableBase}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecciona una base de Airtable" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {airtableBases.length === 0 ? (
+                                  <SelectItem value="none" disabled>
+                                    No se encontraron bases
+                                  </SelectItem>
+                                ) : (
+                                  airtableBases.map((base) => (
+                                    <SelectItem key={base.id} value={base.id}>
+                                      {base.name}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </>
                       )}
+
+                      {syncStatus === 'success' && (
+                        <div className="rounded-md bg-green-100 p-3 text-sm text-green-800">
+                          ✅ Sincronización creada exitosamente
+                        </div>
+                      )}
+                      
+                      {syncStatus === 'error' && (
+                        <div className="rounded-md bg-red-100 p-3 text-sm text-red-800">
+                          ❌ Error al crear la sincronización. Intenta de nuevo.
+                        </div>
+                      )}
+                    </div>
+
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsSyncModalOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button 
+                        onClick={handleCreateSync}
+                        disabled={!selectedNotionDb || !selectedAirtableBase || isLoading}
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Creando...
+                          </>
+                        ) : (
+                          'Crear sincronización'
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </CardContent>
+            </Card>
+
+            {/* Lista de sincronizaciones */}
+            {syncs.length > 0 && (
+              <Card className="mt-8">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Tus sincronizaciones</CardTitle>
+                    <Button variant="outline" size="sm" onClick={loadSyncs} disabled={isLoadingSyncs}>
+                      <RefreshCw className={`h-4 w-4 ${isLoadingSyncs ? 'animate-spin' : ''}`} />
                     </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </CardContent>
-          </Card>
+                  </div>
+                  <CardDescription>
+                    {syncs.length} sincronización{syncs.length !== 1 && 'es'} configurada{syncs.length !== 1 && 's'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {syncs.map((sync) => (
+                      <div key={sync.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div>
+                          <p className="font-medium">
+                            {sync.notionDatabaseName || 'Base de Notion'} → {sync.airtableBaseName || 'Base de Airtable'}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Creada: {new Date(sync.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleExecuteSync(sync.id)}
+                          disabled={executingSyncId === sync.id}
+                        >
+                          {executingSyncId === sync.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Play className="h-4 w-4 mr-1" />
+                              Ejecutar
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {executionResult && (
+                    <div className={`mt-4 p-4 rounded-lg ${executionResult.success ? 'bg-green-100' : 'bg-red-100'}`}>
+                      {executionResult.success ? (
+                        <p className="text-green-800">
+                          ✅ Sincronización ejecutada: {executionResult.recordsCreated} de {executionResult.recordsProcessed} registros creados
+                        </p>
+                      ) : (
+                        <p className="text-red-800">
+                          ❌ Error: {executionResult.error || 'No se pudo ejecutar la sincronización'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </>
         )}
       </div>
     </div>
