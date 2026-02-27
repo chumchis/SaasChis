@@ -78,13 +78,19 @@ export async function GET(request: NextRequest) {
     
     const data = await response.json()
     
-    // TODO: Guardar tokens en base de datos
-    // data.access_token, data.refresh_token, data.scope
-    
+    // Guardar token en cookie
     const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
     const redirectResponse = NextResponse.redirect(
       `${appUrl}/dashboard?airtable=connected`
     )
+    
+    // Guardar token en cookie (httpOnly para seguridad)
+    redirectResponse.cookies.set('airtable_token', data.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30, // 30 días
+    })
     
     redirectResponse.cookies.delete('airtable_oauth_state')
     redirectResponse.cookies.delete('airtable_code_verifier')

@@ -66,12 +66,14 @@ function DashboardContent() {
     window.location.href = '/api/auth/airtable'
   }
 
-  const handleDisconnectNotion = () => {
+  const handleDisconnectNotion = async () => {
+    await fetch('/api/auth/notion/disconnect', { method: 'POST' })
     localStorage.removeItem('notion_connected')
     setNotionConnected(false)
   }
 
-  const handleDisconnectAirtable = () => {
+  const handleDisconnectAirtable = async () => {
+    await fetch('/api/auth/airtable/disconnect', { method: 'POST' })
     localStorage.removeItem('airtable_connected')
     setAirtableConnected(false)
   }

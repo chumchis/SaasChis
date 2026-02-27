@@ -73,14 +73,19 @@ export async function GET(request: NextRequest) {
     
     const data = await response.json()
     
-    // TODO: Guardar tokens en base de datos
-    // data.access_token, data.workspace_id, data.workspace_name, data.bot_id
-    
-    // Redirigir al dashboard con éxito
+    // Guardar token en cookie
     const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
     const redirectResponse = NextResponse.redirect(
       `${appUrl}/dashboard?notion=connected`
     )
+    
+    // Guardar token en cookie (httpOnly para seguridad)
+    redirectResponse.cookies.set('notion_token', data.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30, // 30 días
+    })
     
     // Limpiar cookie de state
     redirectResponse.cookies.delete('notion_oauth_state')
